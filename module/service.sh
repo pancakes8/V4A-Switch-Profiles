@@ -20,6 +20,8 @@ PKG="de.v4aswitch"
   while [ -z "$uid" ] && [ "$n" -lt 30 ]; do
     uid=$(cmd package list packages -U "$PKG" 2>/dev/null |
       sed -n 's/.*uid:\([0-9][0-9]*\).*/\1/p' | head -n 1)
+    [ -n "$uid" ] || uid=$(dumpsys package "$PKG" 2>/dev/null |
+      sed -n 's/.*userId=\([0-9][0-9]*\).*/\1/p' | head -n 1)
     [ -n "$uid" ] || sleep 2
     n=$((n + 1))
   done

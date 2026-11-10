@@ -1,6 +1,6 @@
 id=v4a-profile-switch
 name=V4A Profile Switch (FX + XHiFi) + Widget
-version=v2.0.0
-versionCode=5
+version=v2.1.1
+versionCode=8
 author=Claude
 description=Schaltet ViPER4Android-FX- und XHiFi-Profile ohne MacroDroid um: System-App "V4A Switch" mit Widget (4 Tasten) und 4 Starter-Symbolen, Root-Skripte in /data/adb. Profilnamen in /data/adb/v4a-slots.conf.

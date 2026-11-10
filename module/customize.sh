@@ -6,7 +6,11 @@
 ADB="${NVBASE:-/data/adb}"
 APK="$MODPATH/system/app/V4ASwitch/V4ASwitch.apk"
 
-ui_print "- V4A Profile Switch 2.0 (System-App + Widget)"
+ui_print "- V4A Profile Switch (System-App + Widget)"
+
+if [ -n "$API" ] && [ "$API" -lt 24 ]; then
+  abort "! Android 7.0 (API 24) oder neuer erforderlich"
+fi
 
 [ -f "$APK" ] || abort "! V4ASwitch.apk fehlt im Modul (Build-Skript benutzen)"
 
@@ -40,3 +44,5 @@ set_perm_recursive "$MODPATH/system" 0 0 0755 0644
 
 ui_print "- Fertig. Nach dem Neustart: Widget 'V4A Profile' hinzufuegen"
 ui_print "  oder die Symbole FX Music / FX Voice / XHiFi Music / XHiFi Voice nutzen."
+ui_print "- Voraussetzung: ViPER4Android FX bzw. XHiFi ist installiert und die Profile"
+ui_print "  (FX: Ordner Profile, XHiFi: ProfileXHiFi) heissen wie in $ADB/v4a-slots.conf"

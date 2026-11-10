@@ -20,7 +20,7 @@ mkdir -p build/gen build/classes build/dex
 "$B/aapt2" link -o build/base.apk -I "$AJ" \
   --manifest app/AndroidManifest.xml -R build/res.zip --java build/gen \
   --min-sdk-version 24 --target-sdk-version 33 \
-  --version-code 1 --version-name 1.0.0 --auto-add-overlay
+  --version-code 2 --version-name 1.1.0 --auto-add-overlay
 
 javac -source 8 -target 8 -Xlint:-options -classpath "$AJ" -d build/classes \
   $(find app/src build/gen -name '*.java')

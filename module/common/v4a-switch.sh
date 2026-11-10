@@ -6,7 +6,7 @@
 # ==============================================================
 #
 # Aufruf (als root):
-#   sh v4a-switch.sh load <name>   Profil laden, Dienst neu starten, App öffnen
+#   sh v4a-switch.sh load <name>   Profil laden, Dienst neu starten (App bleibt im Hintergrund)
 #   sh v4a-switch.sh list          alle erkannten Profile anzeigen
 #   sh v4a-switch.sh save <name>   aktuelle Einstellungen als eigenes Profil sichern
 #   sh v4a-switch.sh info          Diagnose
@@ -23,6 +23,12 @@
 # Weitere optionale Variablen:
 #   V4A_PKG, V4A_SERVICE, V4A_ACTIVITY, V4A_STORAGE, V4A_PROFILE_DIR,
 #   V4A_BASE, V4A_LOG, V4A_DATA, V4A_STATE
+#
+# Anwenden des Profils (V4A_APPLY):
+#   service   (Standard) App-Prozess beenden, Profil schreiben, nur den Dienst starten.
+#             Die FX-App oeffnet sich nicht.
+#   app-back  zusaetzlich die App kurz oeffnen und sofort zurueck (kurzes Aufblitzen)
+#   app       zusaetzlich die App oeffnen und offen lassen (altes Verhalten)
 
 # --- Konfigurationsdatei zuerst einlesen, damit sie alle Standardwerte überschreiben kann
 CONF="${V4A_CONF:-/data/adb/v4a-switch.conf}"
@@ -51,8 +57,7 @@ LOG="${V4A_LOG:-$ST/profile-switch-log.txt}"
 STATE="${V4A_STATE:-/data/adb/v4a-switch.current}"
 OUTPUTS="${V4A_OUTPUTS:-speaker headset headphone bluetooth usb}"
 TAG="FX"
-
-PREFS="$DATA/$PKG/shared_prefs"
+APPLY="${V4A_APPLY:-service}"
 
 say() {
   echo "$*"
@@ -68,9 +73,17 @@ rotate_log() {
   rm -f "$LOG.tmp"
 }
 
+# Paket automatisch finden, falls das Standardpaket nicht installiert ist
+# (z. B. andere Variante der FX-App als System-App). XHiFi wird ausgeschlossen.
+if [ -z "$V4A_PKG" ] && [ -z "$(pm path "$PKG" 2>/dev/null)" ]; then
+  alt=$(pm list packages 2>/dev/null | sed 's/^package://' | grep -i 'viper' | grep -v -i 'xhifi' | head -n 1)
+  [ -n "$alt" ] && PKG="$alt"
+fi
+PREFS="$DATA/$PKG/shared_prefs"
+
 usage() {
   echo "Aufruf: sh $0 load|list|save|info [profilname]"
-  echo "  load <name>   Profil laden, Dienst neu starten, App oeffnen"
+  echo "  load <name>   Profil laden, Dienst neu starten (App bleibt im Hintergrund)"
   echo "  list          alle erkannten Profile anzeigen"
   echo "  save <name>   aktuelle Einstellungen als eigenes Profil sichern"
   echo "  info          Diagnose"
@@ -147,15 +160,77 @@ find_profile() {
   return 1
 }
 
-# Dienst stoppen, neu starten, danach die App öffnen
-# (erst dadurch werden alle Effekte, z. B. Convolver, aktiv).
-restart_v4a() {
+# Der Dienst darf im Hintergrund gestartet werden (Android 8+ sperrt das sonst still).
+allow_background() {
+  cmd deviceidle whitelist +"$PKG" >/dev/null 2>&1
+  dumpsys deviceidle whitelist +"$PKG" >/dev/null 2>&1
+  cmd appops set "$PKG" RUN_IN_BACKGROUND allow >/dev/null 2>&1
+  cmd appops set "$PKG" RUN_ANY_IN_BACKGROUND allow >/dev/null 2>&1
+}
+
+v4a_running() {
+  dumpsys activity services "$PKG" 2>/dev/null | grep -q "ServiceRecord"
+}
+
+# Dienst und Prozess der App beenden. Erst dadurch ist der Zwischenspeicher der
+# Einstellungen weg und die App ueberschreibt die neue Datei nicht mehr.
+stop_v4a() {
+  allow_background
   am stopservice -n "$PKG/$SERVICE" >/dev/null 2>&1
+  am force-stop "$PKG" >/dev/null 2>&1
   sleep 1
-  am startservice -n "$PKG/$SERVICE" >/dev/null 2>&1
+}
+
+# Dienst starten (ohne die App zu oeffnen) und pruefen, ob er laeuft.
+start_v4a() {
+  out=$(am startservice -n "$PKG/$SERVICE" 2>&1)
+  case "$out" in
+    *[Ee]rror*|*"not allowed"*|*"Not allowed"*|*"in background"*)
+      say "startservice: $(printf '%s' "$out" | tr '\n' ' ')"
+      # Ersatz: Start-Signal an die App, ihr Empfaenger darf den Dienst starten
+      am broadcast -a android.intent.action.BOOT_COMPLETED -p "$PKG" >/dev/null 2>&1
+      ;;
+  esac
+
+  case "$APPLY" in
+    app | app-back)
+      sleep 2
+      am start -n "$PKG/$ACTIVITY" >/dev/null 2>&1
+      if [ "$APPLY" = "app-back" ]; then
+        sleep 2
+        input keyevent KEYCODE_BACK >/dev/null 2>&1
+      fi
+      ;;
+  esac
 
   sleep 2
-  am start -n "$PKG/$ACTIVITY" >/dev/null 2>&1
+  if v4a_running; then
+    RUNTXT="Dienst laeuft"
+  else
+    RUNTXT="Dienst NICHT gestartet"
+  fi
+}
+
+# Datenordner fuer die Einstellungsdateien sicherstellen.
+ensure_prefs_dir() {
+  [ -d "$PREFS" ] && return 0
+  [ -d "$DATA/$PKG" ] || return 1
+  mkdir -p "$PREFS" || return 1
+  own=$(stat -c '%u:%g' "$DATA/$PKG" 2>/dev/null)
+  [ -n "$own" ] && chown "$own" "$PREFS" 2>/dev/null
+  chmod 771 "$PREFS" 2>/dev/null
+  restorecon "$PREFS" >/dev/null 2>&1
+  return 0
+}
+
+# Fehlende Einstellungsdatei neu anlegen (Besitzer und SELinux-Kontext wie der Ordner).
+new_pref() {
+  cat "$1" > "$2" || return 1
+  own=$(stat -c '%u:%g' "$PREFS" 2>/dev/null)
+  [ -n "$own" ] && chown "$own" "$2" 2>/dev/null
+  chmod 660 "$2" 2>/dev/null
+  restorecon "$2" >/dev/null 2>&1
+  return 0
 }
 
 do_save() {
@@ -182,6 +257,38 @@ do_save() {
   say "Profil '$1' gespeichert ($n Dateien) in $dir"
 }
 
+# Geht die Profildateien durch. Modus "count": zaehlt nur, was ladbar waere.
+# Modus "write": schreibt in die Einstellungen der App. Ergebnis in n.
+scan_profile() {
+  n=0
+  for src in "$1"/*.xml; do
+    [ -f "$src" ] || continue
+    wanted "${src##*/}" || continue
+
+    if ! valid_xml "$src"; then
+      [ "$2" = "write" ] && say "Uebersprungen (keine Einstellungsdatei): ${src##*/}"
+      continue
+    fi
+
+    if [ "$2" = "count" ]; then
+      n=$((n + 1))
+      continue
+    fi
+
+    dst="$PREFS/${src##*/}"
+    if [ -f "$dst" ]; then
+      # cat statt cp: Besitzer, Rechte und SELinux-Kontext
+      # der App-Einstellungsdatei bleiben erhalten.
+      cat "$src" > "$dst" && n=$((n + 1))
+    elif new_pref "$src" "$dst"; then
+      say "Neu angelegt (fehlte): ${src##*/}"
+      n=$((n + 1))
+    else
+      say "Uebersprungen (Zieldatei nicht anlegbar): ${src##*/}"
+    fi
+  done
+}
+
 do_load() {
   check_name "$1"
   rotate_log
@@ -191,34 +298,34 @@ do_load() {
     exit 1
   }
 
-  n=0
-  for src in "$dir"/*.xml; do
-    [ -f "$src" ] || continue
-    wanted "${src##*/}" || continue
-
-    if ! valid_xml "$src"; then
-      say "Uebersprungen (keine Einstellungsdatei): ${src##*/}"
-      continue
-    fi
-
-    dst="$PREFS/${src##*/}"
-    if [ -f "$dst" ]; then
-      # cat statt cp: Besitzer, Rechte und SELinux-Kontext
-      # der App-Einstellungsdatei bleiben erhalten.
-      cat "$src" > "$dst" && n=$((n + 1))
-    else
-      say "Uebersprungen (Zieldatei fehlt): ${src##*/}"
-    fi
-  done
-
+  # Erst pruefen, ob etwas ladbar ist, bevor die App beendet wird.
+  scan_profile "$dir" count
   if [ "$n" -eq 0 ]; then
-    say "Es wurde keine Datei geladen (Profil '$1' in $dir)."
+    say "Es wurde keine Datei geladen (Profil '$1' in $dir, Ausgaenge: $OUTPUTS)."
     exit 1
   fi
 
+  ensure_prefs_dir || {
+    say "Datenordner $DATA/$PKG fehlt. Ist die FX-App (Paket $PKG) installiert? Befehl 'info' zeigt Details."
+    exit 1
+  }
+
+  stop_v4a
+  scan_profile "$dir" write
+  written="$n"
+
   { echo "${dir##*/}" > "$STATE"; } 2>/dev/null
-  restart_v4a
-  say "Profil '${dir##*/}' geladen ($n Dateien), V4A-Dienst neu gestartet und App geoeffnet."
+  start_v4a
+
+  if [ "$written" -eq 0 ]; then
+    say "Es wurde keine Datei geschrieben (Profil '$1' in $dir, Ordner $PREFS)."
+    exit 1
+  fi
+
+  say "Profil '${dir##*/}' geladen ($written Dateien), $RUNTXT, Modus $APPLY, Paket $PKG."
+  if [ "$RUNTXT" != "Dienst laeuft" ] && [ "$APPLY" = "service" ]; then
+    say "Hinweis: Dienst startet nicht von selbst. In /data/adb/v4a-switch.conf V4A_APPLY=\"app-back\" setzen."
+  fi
 }
 
 # Alle Unterordner eines Verzeichnisses als Profile auflisten.
@@ -257,6 +364,8 @@ do_info() {
   echo "Installiert:  $(pm path "$PKG" 2>/dev/null | head -1)"
   echo "App-UID:      $(stat -c %u "$DATA/$PKG" 2>/dev/null)"
   echo "Ausgaenge:    $OUTPUTS"
+  echo "Modus:        $APPLY"
+  v4a_running && echo "Dienst:       laeuft" || echo "Dienst:       laeuft nicht"
   echo "Speicherort:  $ST"
   echo "App-Profile:  $PROFILE_DIR"
   echo "Eigene:       $BASE"

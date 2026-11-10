@@ -43,6 +43,36 @@ Danach das Widget **V4A Profile (FX + XHiFi)** hinzufügen oder die Symbole benu
 
 Protokoll aller Wechsel: `/sdcard/ViPER4Android/profile-switch-log.txt`
 
+## FX umschalten, ohne dass die FX-App aufgeht (ab v2.0.1)
+
+`v4a-switch.sh` beendet beim Laden eines FX-Profils den Prozess der FX-App, schreibt die
+Profildateien (fehlende Dateien werden angelegt) und startet nur den Dienst. Die App
+öffnet sich nicht. Ob der Dienst lief, steht im Log
+(`/sdcard/ViPER4Android/profile-switch-log.txt`).
+
+Falls ein Profil so nicht wirkt, in `/data/adb/v4a-switch.conf` einstellen:
+
+    V4A_APPLY="app-back"    # App kurz öffnen und sofort zurück
+    V4A_APPLY="app"         # App öffnen und offen lassen (altes Verhalten)
+    V4A_PKG="paket.name"    # nur nötig, wenn die FX-App anders heißt
+
+### Nur das Skript tauschen (ohne Neubau)
+
+    adb push v4a-switch.sh /sdcard/Download/
+    adb shell su -c 'cp /sdcard/Download/v4a-switch.sh /data/adb/v4a-switch.sh && chmod 755 /data/adb/v4a-switch.sh'
+    adb shell su -c 'sh /data/adb/v4a-switch.sh load music'
+    adb shell su -c 'sh /data/adb/v4a-switch.sh info'
+
+## Auf einem weiteren Gerät installieren
+
+Das Modul-ZIP ist in sich komplett (App, Skripte, Konfiguration). Auf dem anderen Gerät:
+Magisk → Module → ZIP installieren → Neustart. Weitere Schritte oder Skriptdateien sind
+nicht nötig. Voraussetzungen: Magisk (ab ca. Version 20), Android 7 oder neuer,
+ViPER4Android FX und/oder XHiFi installiert, und Profile, die so heißen wie in
+`/data/adb/v4a-slots.conf` (Standard: FX `music`/`voice`, XHiFi `Boosted`/`voice`).
+Die Profile selbst kopiert das Modul nicht: Ordner `Profile` und `ProfileXHiFi` unter
+`ViPER4Android` im Gerätespeicher vom ersten Gerät übernehmen.
+
 ## Root-Freigabe
 
 `service.sh` erteilt der App beim Start die Root-Freigabe (Magisk 24 oder neuer).
