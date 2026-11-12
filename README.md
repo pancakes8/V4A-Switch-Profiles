@@ -30,6 +30,14 @@ deshalb baut sie ein kostenloser GitHub-Server für dich – ohne Installation a
 Alternativ lokal (Linux/WSL): `ANDROID_HOME` setzen (build-tools und platforms ab 33,
 JDK 17), dann `bash build.sh`. Ergebnis: `dist/V4A-Profile-Switch-v2.0.0.zip`.
 
+## Icons
+
+Die vier Symbole und das Widget sind Adaptive Icons (Hintergrund + Symbol), die jeder
+Launcher passend zuschneidet: FX violett, XHiFi blau, Musik als V-Shape-Equalizer, Voice als
+Mikrofon. Für Android 7.x gibt es fertige Ersatz-Icons. Neu erzeugen mit
+`python3 tools/make_icons.py` (Pillow nötig), Farben dort in `PALETTE` und in
+`app/res/drawable/ic_bg_*.xml` und `btn_*.xml`.
+
 ## 2. Installieren
 
 Magisk → Module → „Von Speicher installieren“ → ZIP wählen → Neustart.
@@ -43,18 +51,54 @@ Danach das Widget **V4A Profile (FX + XHiFi)** hinzufügen oder die Symbole benu
 
 Protokoll aller Wechsel: `/sdcard/ViPER4Android/profile-switch-log.txt`
 
-## FX umschalten, ohne dass die FX-App aufgeht (ab v2.0.1)
+## FX-Profile anwenden
 
-`v4a-switch.sh` beendet beim Laden eines FX-Profils den Prozess der FX-App, schreibt die
-Profildateien (fehlende Dateien werden angelegt) und startet nur den Dienst. Die App
-öffnet sich nicht. Ob der Dienst lief, steht im Log
-(`/sdcard/ViPER4Android/profile-switch-log.txt`).
+`v4a-switch.sh` schreibt beim Laden eines FX-Profils zuerst sofort die Profildateien,
+beendet dann den Prozess der FX-App (überlebt er das, wird er hart beendet; das Log nennt
+die Prozess-IDs vorher und nachher) und startet den Dienst neu. Die FX-App öffnet sich
+dabei nicht. Das Log (`/sdcard/ViPER4Android/profile-switch-log.txt`) zeigt Start,
+Kontrolle und die Dauer in Sekunden.
 
-Falls ein Profil so nicht wirkt, in `/data/adb/v4a-switch.conf` einstellen:
+Einstellbar in `/data/adb/v4a-switch.conf` (ohne Eintrag gilt `service`):
 
-    V4A_APPLY="app-back"    # App kurz öffnen und sofort zurück
-    V4A_APPLY="app"         # App öffnen und offen lassen (altes Verhalten)
+    V4A_APPLY="service"     # Standard: App öffnet sich nicht
+    V4A_APPLY="app-back"    # App öffnen und per Zurück-Taste schließen (auf manchen Boxen unmöglich)
+    V4A_APPLY="app"         # App öffnen und offen lassen
+    V4A_APP_WAIT="2"        # Sekunden, die die App bei app-back offen bleibt
     V4A_PKG="paket.name"    # nur nötig, wenn die FX-App anders heißt
+
+Einträge von früheren Tests entfernen:
+`sed -i '/V4A_APPLY/d;/V4A_APP_WAIT/d' /data/adb/v4a-switch.conf`
+
+### Gesperrter Effekt-Modus („Lock effect mode“)
+
+Ist die FX-App auf einen festen Modus gesperrt (z. B. `bluetooth` statt `headset`), gilt
+trotzdem das geladene Profil: Das Skript übernimmt die Einstellungen des Haupt-Modus
+(Standard `headset`) auch in die Dateien von `bluetooth` und `usb`. Einstellbar in
+`/data/adb/v4a-switch.conf`:
+
+    V4A_MIRROR_FROM="headset"        # Modus, in dem die Profile eingestellt wurden
+    V4A_MIRROR_TO="bluetooth usb"    # Modi, die dieselben Einstellungen bekommen
+    V4A_MIRROR_FROM=""               # Spiegelung ausschalten
+
+Der Lautsprecher-Modus (`speaker`) hat andere Einstellungen und wird nicht gespiegelt.
+
+### Geräteschützter Speicher (DE)
+
+Manche System-App-Varianten legen ihre Einstellungen nicht in `/data/data/<Paket>/shared_prefs`,
+sondern in `/data/user_de/0/<Paket>/shared_prefs`. Existiert dieser Ordner, schreibt das
+Skript dieselben Einstellungsdateien auch dorthin (Log: „Auch im geschützten Speicher (DE)
+aktualisiert“). `check` zeigt beide Ordner und alle gefundenen Einstellungsdateien mit Zeit.
+
+### Profile prüfen
+
+    sh /data/adb/v4a-switch.sh check music voice
+
+zeigt für jeden Ausgang (speaker, headset …) die aktuellen Einstellungen der FX-App und
+den Inhalt der Profile `music` und `voice`: Schalter für Convolver (`conv`) und FIR-EQ
+(`fir`) plus eine Kurzkennung (`#abc123`) der FIR-EQ-/Convolver-Werte. Gleiche Kennung
+heißt gleiche Einstellungen. Nach jedem Umschalten schreibt das Log dazu eine Zeile
+„Kontrolle … gleich“ oder „ABWEICHEND“ (die App hat die Werte danach verändert).
 
 ### Nur das Skript tauschen (ohne Neubau)
 

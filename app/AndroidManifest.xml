@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="de.v4aswitch"
-    android:versionCode="2"
-    android:versionName="1.1.0">
+    android:versionCode="3"
+    android:versionName="1.2.0">
 
     <uses-sdk
         android:minSdkVersion="24"
@@ -10,7 +10,7 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@drawable/ic_fx_music"
+        android:icon="@mipmap/ic_fx_music"
         android:label="V4A Switch">
 
         <!-- Nur intern erreichbar (Widget-Tasten); fremde Apps koennen keine Root-Befehle ausloesen -->
@@ -36,7 +36,7 @@
             android:name=".FxMusicActivity"
             android:excludeFromRecents="true"
             android:exported="true"
-            android:icon="@drawable/ic_fx_music"
+            android:icon="@mipmap/ic_fx_music"
             android:label="FX Music"
             android:noHistory="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
@@ -50,7 +50,7 @@
             android:name=".FxVoiceActivity"
             android:excludeFromRecents="true"
             android:exported="true"
-            android:icon="@drawable/ic_fx_voice"
+            android:icon="@mipmap/ic_fx_voice"
             android:label="FX Voice"
             android:noHistory="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
@@ -64,7 +64,7 @@
             android:name=".XhifiMusicActivity"
             android:excludeFromRecents="true"
             android:exported="true"
-            android:icon="@drawable/ic_xhifi_music"
+            android:icon="@mipmap/ic_xhifi_music"
             android:label="XHiFi Music"
             android:noHistory="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
@@ -78,7 +78,7 @@
             android:name=".XhifiVoiceActivity"
             android:excludeFromRecents="true"
             android:exported="true"
-            android:icon="@drawable/ic_xhifi_voice"
+            android:icon="@mipmap/ic_xhifi_voice"
             android:label="XHiFi Voice"
             android:noHistory="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
